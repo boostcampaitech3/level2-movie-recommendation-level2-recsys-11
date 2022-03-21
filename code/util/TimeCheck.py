@@ -5,6 +5,7 @@ from time import sleep
 # %%
 class TimeCheck():
     FN_PRINT = print
+    PREFIX = '\t'
     def __init__(self, flag=True) -> None:
         self.queue = []
         self.flag = flag
@@ -24,7 +25,7 @@ class TimeCheck():
         
     def mark_(self, name_flag:str):
         self.mark(name_flag)
-        self.FN_PRINT(name_flag)
+        self.FN_PRINT(self.PREFIX + name_flag)
     
     def cal(self):
         result = {}
@@ -33,7 +34,7 @@ class TimeCheck():
                 previous_entity = entity
                 continue
             else:
-                name = f"[{previous_entity[0]}] --> [{entity[0]}]"
+                name = f"{self.PREFIX}[{previous_entity[0]}] --> [{entity[0]}]"
                 diff = entity[1] - previous_entity[1]
                 result[name] = diff
                 previous_entity = entity

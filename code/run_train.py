@@ -16,13 +16,15 @@ from utils import (
     set_seed,
 )
 
-## 추가한 코드 ####
+## 박정훈이 추가한 코드 ####
 from util.TimeCheck import TimeCheck
 ###################
 
 def main():
     ## 박정훈이 추가한 코드 ####
-    tc = TimeCheck()
+    # TimeCheck 파라미터에 True를 주면 각 코드의 실행 시간을 표시해줌.
+    
+    tc = TimeCheck(False)
     ###################
     tc('# argparse 설정')
     parser = argparse.ArgumentParser()
