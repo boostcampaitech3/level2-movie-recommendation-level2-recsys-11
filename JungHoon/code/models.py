@@ -1,9 +1,12 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 
 from modules import Encoder, LayerNorm
 
 
+# https://github.com/RUCAIBox/CIKM2020-S3Rec/blob/master/models.py
 class S3RecModel(nn.Module):
     def __init__(self, args):
         super(S3RecModel, self).__init__()
@@ -237,3 +240,4 @@ class S3RecModel(nn.Module):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
+

@@ -1,0 +1,13 @@
+# 개인 .gitignore
+/util/iksad_EDA.py
+memo.txt
+data_link
+hojin
+
+# wandb 데이터 제외
+wandb
+output/**
+script/bg_log.out
+__pycache__/
+util/__pycache__/
+**/__pycache__/

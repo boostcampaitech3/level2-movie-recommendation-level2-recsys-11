@@ -1,3 +1,11 @@
+import wandb
+# 여기에 project명 쓰고 entity에는 자기 W&B 아이디 쓰면 됨.
+# 그리고 이거 파일 돌리기 이전에 터미널 창에 "wandb login" 치고 로그인 해줘야 함.
+# 로그인하는 방법은 링크에 나와 있음.
+# https://greeksharifa.github.io/references/2020/06/10/wandb-usage/
+wandb.init(project="MovieRec", entity="iksadnorth")
+
+import copy
 import argparse
 import os
 
@@ -16,17 +24,13 @@ from utils import (
     set_seed,
 )
 
-## 박정훈이 추가한 코드 ####
+import datasets, models 
+from util import LoadJson
 from util.TimeCheck import TimeCheck
-###################
 
-def main():
-    ## 박정훈이 추가한 코드 ####
-    # TimeCheck 파라미터에 True를 주면 각 코드의 실행 시간을 표시해줌.
-    
-    tc = TimeCheck(False)
-    ###################
-    tc('# argparse 설정')
+
+def main():    
+    # argparse 설정
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--data_dir", default="../data/train/", type=str)
@@ -62,6 +66,7 @@ def main():
     )
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs")
     parser.add_argument("--no_cuda", action="store_true")
+    parser.add_argument("--timelog", action="store_true")
     parser.add_argument("--log_freq", type=int, default=1, help="per epoch print res")
     parser.add_argument("--seed", default=42, type=int)
 
@@ -79,14 +84,20 @@ def main():
     parser.add_argument("--using_pretrain", action="store_true")
 
     args = parser.parse_args()
+    
+    LoadJson.dump(args, "/opt/ml/baseline/code/config.json")
+    Dataset = getattr(datasets, args.Dataset)
+    Model = getattr(models, args.Model)
 
+    # TimeCheck
+    tc = TimeCheck(args.timelog)
     set_seed(args.seed)
     check_path(args.output_dir)
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     args.cuda_condition = torch.cuda.is_available() and not args.no_cuda
     
-    tc('# 데이터 전처리')
+    # 데이터 전처리
     args.data_file = args.data_dir + "train_ratings.csv"
     item2attribute_file = args.data_dir + args.data_name + "_item2attributes.json"
 
@@ -96,12 +107,12 @@ def main():
 
     item2attribute, attribute_size = get_item2attribute_json(item2attribute_file)
 
-    args.item_size = max_item + 2
-    args.mask_id = max_item + 1
-    args.attribute_size = attribute_size + 1
+    args.item_size = max_item + 2               
+    args.mask_id = max_item + 1                 
+    args.attribute_size = attribute_size + 1    
 
-    tc('# save model args')
-    args_str = f"{args.model_name}-{args.data_name}"
+    # save model args
+    args_str = f"{args.model_name}-{args.data_name}_{args.output_name}"
     args.log_file = os.path.join(args.output_dir, args_str + ".txt")
     print(str(args))
 
@@ -109,41 +120,41 @@ def main():
     # set item score in train set to `0` in validation
     args.train_matrix = valid_rating_matrix
 
-    tc('# save model')
+    # save model
     checkpoint = args_str + ".pt"
     args.checkpoint_path = os.path.join(args.output_dir, checkpoint)
 
-    tc('# Dataset, DataLoader 정의')
-    train_dataset = SASRecDataset(args, user_seq, data_type="train")
+    # Dataset, DataLoader 정의
+    train_dataset = Dataset(args, user_seq, data_type="train")
     train_sampler = RandomSampler(train_dataset)
     train_dataloader = DataLoader(
         train_dataset, sampler=train_sampler, batch_size=args.batch_size
     )
 
-    eval_dataset = SASRecDataset(args, user_seq, data_type="valid")
+    eval_dataset = Dataset(args, user_seq, data_type="valid")
     eval_sampler = SequentialSampler(eval_dataset)
     eval_dataloader = DataLoader(
         eval_dataset, sampler=eval_sampler, batch_size=args.batch_size
     )
 
-    test_dataset = SASRecDataset(args, user_seq, data_type="test")
+    test_dataset = Dataset(args, user_seq, data_type="test")
     test_sampler = SequentialSampler(test_dataset)
     test_dataloader = DataLoader(
         test_dataset, sampler=test_sampler, batch_size=args.batch_size
     )
 
-    tc('# Model 정의')
-    model = S3RecModel(args=args)
+    # Model 정의
+    model = Model(args=args)
 
-    tc('# FinetuneTrainer 정의')
+    # FinetuneTrainer 정의
     trainer = FinetuneTrainer(
         model, train_dataloader, eval_dataloader, test_dataloader, None, args
     )
 
-    tc('# pretrained_path 로드')
+    # pretrained_path 로드
     print(args.using_pretrain)
     if args.using_pretrain:
-        pretrained_path = os.path.join(args.output_dir, "Pretrain.pt")
+        pretrained_path = os.path.join(args.output_dir, f"Pretrain_{args.data_name}_{args.output_name}.pt")
         try:
             trainer.load(pretrained_path)
             print(f"Load Checkpoint From {pretrained_path}!")
@@ -153,22 +164,35 @@ def main():
     else:
         print("Not using pretrained model. The Model is same as SASRec")
 
-    tc('# EarlyStopping 정의')
+    # wandb config 설정.
+    wandb_config = copy.deepcopy(args.__dict__)
+    wandb_config.pop('item2attribute')
+    wandb_config.pop('train_matrix')
+    wandb.config.update(wandb_config)
+    
+    # wandb run 이름 설정.
+    RUN_NAME=f"{args.model_name}_{args.data_name}_{args.output_name}_{str(id(args))[-4:]}"
+    wandb.run.name = RUN_NAME
+    
+    # EarlyStopping 정의
     early_stopping = EarlyStopping(args.checkpoint_path, patience=10, verbose=True)
-    tc.print('# 각종 설정 종료 및 train 실행')
+    # 각종 설정 종료 및 train 실행
     for epoch in range(args.epochs):
-        tc(f'# epoch_{epoch} 실행')
-        tc('# train 수행')
+        # train 수행
         trainer.train(epoch)
 
-        tc('# valid 수행')
+        # valid 수행
         scores, _ = trainer.valid(epoch)
+        
+        # W&B에 scores 출력.
+        keys = ["Recall@5", "NDCG@5", "RECALL@10", "NDCG@10"]
+        log_dict = {k:float(v) for k,v in zip(keys, scores)}
+        wandb.log(log_dict)
 
         early_stopping(np.array(scores[-1:]), trainer.model)
         if early_stopping.early_stop:
             print("Early stopping")
             break
-        tc.print(f'# epoch_{epoch} 종료')
 
     trainer.args.train_matrix = test_rating_matrix
     print("---------------Change to test_rating_matrix!-------------------")

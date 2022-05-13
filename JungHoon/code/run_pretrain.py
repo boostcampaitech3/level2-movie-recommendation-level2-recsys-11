@@ -1,3 +1,11 @@
+import wandb
+# 여기에 project명 쓰고 entity에는 자기 W&B 아이디 쓰면 됨.
+# 그리고 이거 파일 돌리기 이전에 터미널 창에 "wandb login" 치고 로그인 해줘야 함.
+# 로그인하는 방법은 링크에 나와 있음.
+# https://greeksharifa.github.io/references/2020/06/10/wandb-usage/
+wandb.init(project="MovieRec", entity="iksadnorth")
+
+import copy
 import argparse
 import os
 
@@ -6,7 +14,9 @@ import torch
 from torch.utils.data import DataLoader, RandomSampler
 
 from datasets import PretrainDataset
+import datasets
 from models import S3RecModel
+import models
 from trainers import PretrainTrainer
 from utils import (
     EarlyStopping,
@@ -15,6 +25,8 @@ from utils import (
     get_user_seqs_long,
     set_seed,
 )
+
+from util import LoadJson
 
 
 def main():
@@ -81,11 +93,14 @@ def main():
     parser.add_argument("--gpu_id", type=str, default="0", help="gpu_id")
 
     args = parser.parse_args()
+    LoadJson.dump(args, "/opt/ml/baseline/code/config.json")
+    PreDataset = getattr(datasets, args.PreDataset)
+    Model = getattr(models, args.Model)
 
     set_seed(args.seed)
     check_path(args.output_dir)
 
-    args.checkpoint_path = os.path.join(args.output_dir, "Pretrain.pt")
+    args.checkpoint_path = os.path.join(args.output_dir, f"Pretrain_{args.data_name}_{args.output_name}.pt")
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     args.cuda_condition = torch.cuda.is_available() and not args.no_cuda
@@ -104,14 +119,23 @@ def main():
 
     args.item2attribute = item2attribute
 
-    model = S3RecModel(args=args)
+    model = Model(args=args)
     trainer = PretrainTrainer(model, None, None, None, None, args)
 
     early_stopping = EarlyStopping(args.checkpoint_path, patience=10, verbose=True)
+    
+    # wandb config 설정.
+    wandb_config = copy.deepcopy(args.__dict__)
+    wandb_config.pop('item2attribute')
+    wandb.config.update(wandb_config)
+    
+    # wandb run 이름 설정.
+    RUN_NAME=f"{args.model_name}_{args.data_name}_{args.output_name}_{str(id(args))[-4:]}"
+    wandb.run.name = RUN_NAME
 
     for epoch in range(args.pre_epochs):
 
-        pretrain_dataset = PretrainDataset(args, user_seq, long_sequence)
+        pretrain_dataset = PreDataset(args, user_seq, long_sequence)
         pretrain_sampler = RandomSampler(pretrain_dataset)
         pretrain_dataloader = DataLoader(
             pretrain_dataset, sampler=pretrain_sampler, batch_size=args.pre_batch_size
@@ -124,6 +148,9 @@ def main():
         if early_stopping.early_stop:
             print("Early stopping")
             break
+        
+        losses.pop('epoch')
+        wandb.log(losses)
 
 
 if __name__ == "__main__":

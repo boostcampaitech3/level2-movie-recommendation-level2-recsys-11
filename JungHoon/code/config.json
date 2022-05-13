@@ -1,0 +1,12 @@
+{
+    "data_dir" : "/opt/ml/baseline/code/data_link/train/",
+    "Model" : "S3RecModel",
+    "Dataset" : "SASRecDataset",
+    "PreDataset": "PretrainDataset",
+
+    "hidden_act":"swish",
+
+    "using_pretrain" : true,
+    "data_name" : "Ml_genre",
+    "output_name": "swish"
+}

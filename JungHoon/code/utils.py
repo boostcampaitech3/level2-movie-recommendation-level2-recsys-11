@@ -27,6 +27,8 @@ def check_path(path):
         print(f"{path} created")
 
 
+# neg_sample는 단순히 item_set에 없는 item들을 출력하는 방식이다.
+# 해당 방식은 출력했던 item을 다시 출력할 위험이 있다. 복원 추출 방식임.
 def neg_sample(item_set, item_size):
     item = random.randint(1, item_size - 1)
     while item in item_set:
@@ -101,7 +103,7 @@ def generate_rating_matrix_valid(user_seq, num_users, num_items):
     col = []
     data = []
     for user_id, item_list in enumerate(user_seq):
-        for item in item_list[:-2]:  #
+        for item in item_list[:-2]:  # 
             row.append(user_id)
             col.append(item)
             data.append(1)
@@ -110,6 +112,8 @@ def generate_rating_matrix_valid(user_seq, num_users, num_items):
     col = np.array(col)
     data = np.array(data)
     rating_matrix = csr_matrix((data, (row, col)), shape=(num_users, num_items))
+    # csr_matrix : 압축 희소 행(CSR) 행렬
+    # https://rfriend.tistory.com/551
 
     return rating_matrix
 
@@ -120,7 +124,7 @@ def generate_rating_matrix_test(user_seq, num_users, num_items):
     col = []
     data = []
     for user_id, item_list in enumerate(user_seq):
-        for item in item_list[:-1]:  #
+        for item in item_list[:-1]:  # test -1을 사용
             row.append(user_id)
             col.append(item)
             data.append(1)
@@ -139,7 +143,7 @@ def generate_rating_matrix_submission(user_seq, num_users, num_items):
     col = []
     data = []
     for user_id, item_list in enumerate(user_seq):
-        for item in item_list[:]:  #
+        for item in item_list[:]:  # submission 모두를 사용
             row.append(user_id)
             col.append(item)
             data.append(1)
@@ -152,7 +156,7 @@ def generate_rating_matrix_submission(user_seq, num_users, num_items):
     return rating_matrix
 
 
-def generate_submission_file(data_file, preds):
+def generate_submission_file(data_file, preds, suffix=''):
 
     rating_df = pd.read_csv(data_file)
     users = rating_df["user"].unique()
@@ -164,7 +168,7 @@ def generate_submission_file(data_file, preds):
             result.append((users[index], item))
 
     pd.DataFrame(result, columns=["user", "item"]).to_csv(
-        "output/submission.csv", index=False
+        f"output/submission{'_' + suffix}.csv", index=False
     )
 
 
@@ -182,6 +186,7 @@ def get_user_seqs(data_file):
 
     num_users = len(lines)
     num_items = max_item + 2
+    # 왜 2 더함?
 
     valid_rating_matrix = generate_rating_matrix_valid(user_seq, num_users, num_items)
     test_rating_matrix = generate_rating_matrix_test(user_seq, num_users, num_items)
@@ -194,6 +199,25 @@ def get_user_seqs(data_file):
         valid_rating_matrix,
         test_rating_matrix,
         submission_rating_matrix,
+    )
+
+def get_user_item_unique(data_file):
+    rating_df = pd.read_csv(data_file)
+    lines = rating_df.groupby("user")["item"].apply(list)
+    user_set = lines.index
+    item_set = set()
+    
+    for line in lines:
+        items = line
+        item_set = item_set | set(items)
+    
+    user_set, item_set = user_set.tolist(), list(item_set)
+    user_set.sort()
+    item_set.sort()
+    
+    return (
+        user_set,
+        item_set
     )
 
 

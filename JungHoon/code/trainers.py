@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import tqdm
@@ -55,6 +56,9 @@ class Trainer:
 
     def submission(self, epoch):
         return self.iteration(epoch, self.submission_dataloader, mode="submission")
+    
+    def ensemble(self, epoch=0):
+        return self.iteration(epoch, self.submission_dataloader, mode="ensemble")
 
     def iteration(self, epoch, dataloader, mode="train"):
         raise NotImplementedError
@@ -260,6 +264,34 @@ class FinetuneTrainer(Trainer):
             if (epoch + 1) % self.args.log_freq == 0:
                 print(str(post_fix))
 
+        elif mode == "ensemble":
+            self.model.eval()
+
+            pred_list = None
+            for i, batch in rec_data_iter:
+
+                batch = tuple(t.to(self.device) for t in batch)
+                user_ids, input_ids, _, target_neg, answers = batch
+                recommend_output = self.model.finetune(input_ids)
+
+                recommend_output = recommend_output[:, -1, :]
+
+                rating_pred = self.predict_full(recommend_output)
+                
+                rating_pred = rating_pred.cpu().data.numpy().copy()
+                batch_user_index = user_ids.cpu().numpy()
+                rating_pred[self.args.train_matrix[batch_user_index].toarray() > 0] = 0
+                
+                rating_pred = pd.DataFrame(rating_pred)
+                rating_pred = rating_pred[self.args.item_set]
+                
+                if i == 0:
+                    pred_list = rating_pred
+                else:
+                    pred_list = pd.concat([pred_list, rating_pred], axis=0)
+                
+            return pred_list
+            
         else:
             self.model.eval()
 

@@ -14,6 +14,7 @@ from utils import (
     get_user_seqs,
     set_seed,
 )
+from util import LoadJson
 
 
 def main():
@@ -68,6 +69,7 @@ def main():
     parser.add_argument("--gpu_id", type=str, default="0", help="gpu_id")
 
     args = parser.parse_args()
+    LoadJson.dump(args,"/opt/ml/baseline/code/config.json")
 
     set_seed(args.seed)
     check_path(args.output_dir)
@@ -87,7 +89,7 @@ def main():
     args.attribute_size = attribute_size + 1
 
     # save model args
-    args_str = f"{args.model_name}-{args.data_name}"
+    args_str = f"{args.model_name}-{args.data_name}_{args.output_name}"
 
     print(str(args))
 
@@ -112,7 +114,7 @@ def main():
     print(f"Load model from {args.checkpoint_path} for submission!")
     preds = trainer.submission(0)
 
-    generate_submission_file(args.data_file, preds)
+    generate_submission_file(args.data_file, preds, args_str)
 
 
 if __name__ == "__main__":
