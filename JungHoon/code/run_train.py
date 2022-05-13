@@ -16,8 +16,17 @@ from utils import (
     set_seed,
 )
 
+## 박정훈이 추가한 코드 ####
+from util.TimeCheck import TimeCheck
+###################
 
 def main():
+    ## 박정훈이 추가한 코드 ####
+    # TimeCheck 파라미터에 True를 주면 각 코드의 실행 시간을 표시해줌.
+    
+    tc = TimeCheck(False)
+    ###################
+    tc('# argparse 설정')
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--data_dir", default="../data/train/", type=str)
@@ -76,7 +85,8 @@ def main():
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     args.cuda_condition = torch.cuda.is_available() and not args.no_cuda
-
+    
+    tc('# 데이터 전처리')
     args.data_file = args.data_dir + "train_ratings.csv"
     item2attribute_file = args.data_dir + args.data_name + "_item2attributes.json"
 
@@ -90,7 +100,7 @@ def main():
     args.mask_id = max_item + 1
     args.attribute_size = attribute_size + 1
 
-    # save model args
+    tc('# save model args')
     args_str = f"{args.model_name}-{args.data_name}"
     args.log_file = os.path.join(args.output_dir, args_str + ".txt")
     print(str(args))
@@ -99,10 +109,11 @@ def main():
     # set item score in train set to `0` in validation
     args.train_matrix = valid_rating_matrix
 
-    # save model
+    tc('# save model')
     checkpoint = args_str + ".pt"
     args.checkpoint_path = os.path.join(args.output_dir, checkpoint)
 
+    tc('# Dataset, DataLoader 정의')
     train_dataset = SASRecDataset(args, user_seq, data_type="train")
     train_sampler = RandomSampler(train_dataset)
     train_dataloader = DataLoader(
@@ -121,12 +132,15 @@ def main():
         test_dataset, sampler=test_sampler, batch_size=args.batch_size
     )
 
+    tc('# Model 정의')
     model = S3RecModel(args=args)
 
+    tc('# FinetuneTrainer 정의')
     trainer = FinetuneTrainer(
         model, train_dataloader, eval_dataloader, test_dataloader, None, args
     )
 
+    tc('# pretrained_path 로드')
     print(args.using_pretrain)
     if args.using_pretrain:
         pretrained_path = os.path.join(args.output_dir, "Pretrain.pt")
@@ -139,16 +153,22 @@ def main():
     else:
         print("Not using pretrained model. The Model is same as SASRec")
 
+    tc('# EarlyStopping 정의')
     early_stopping = EarlyStopping(args.checkpoint_path, patience=10, verbose=True)
+    tc.print('# 각종 설정 종료 및 train 실행')
     for epoch in range(args.epochs):
+        tc(f'# epoch_{epoch} 실행')
+        tc('# train 수행')
         trainer.train(epoch)
 
+        tc('# valid 수행')
         scores, _ = trainer.valid(epoch)
 
         early_stopping(np.array(scores[-1:]), trainer.model)
         if early_stopping.early_stop:
             print("Early stopping")
             break
+        tc.print(f'# epoch_{epoch} 종료')
 
     trainer.args.train_matrix = test_rating_matrix
     print("---------------Change to test_rating_matrix!-------------------")
